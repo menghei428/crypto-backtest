@@ -20,6 +20,10 @@ pip install ccxt pandas numpy matplotlib
 python backtest.py
 ```
 
+## Output
+![Two-panel chart comparing BTC/USDT SMA Crossover Strategy performance versus Buy-and-Hold from February 2025 to May 2026.](backtest_results.png)
+
+
 ## Assumptions & Limitations
 
 This backtest operates under idealised market conditions:
@@ -30,6 +34,3 @@ This backtest operates under idealised market conditions:
 - **Perfect fills**
 
 These assumptions cause backtests to systematically overestimate real-world performance. A production system would model fees and slippage explicitly.
-
-## Output
-![Two-panel chart comparing BTC/USDT SMA Crossover Strategy performance versus Buy-and-Hold from February 2025 to May 2026.](backtest_results.png)

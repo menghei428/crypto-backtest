@@ -3,10 +3,6 @@ Simple Backtesting Framework for a Moving Average Crossover Strategy on Binance 
 Strategy:
 - Buy when the 20-day Simple Moving Average (SMA) crosses above the 50-day SMA
 - Sell when the 20-day SMA crosses below the 50-day SMA
-Metrics Evaluated:
-- Total Return: Overall percentage gain/loss of the strategy
-- Sharpe Ratio: Risk-adjusted return (higher is better)
-- Maximum Drawdown: Largest peak-to-trough decline (lower is better)
 '''
 
 import ccxt
@@ -21,6 +17,13 @@ LIMIT        = 500 # number of daily candles (~1.5 years)
 SHORT_WINDOW = 20
 LONG_WINDOW  = 50 
 
+TAKER_FEE = 0.001 # Binance taker rate
+SLIPPAGE = 0.0005
+COST_PER_TRADE = TAKER_FEE + SLIPPAGE
+
+
+
+
 def fetch_data(symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
     exchange = ccxt.binance()
     raw = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit) # OHLCV: Open, High, Low, Close, and Volume
@@ -31,7 +34,7 @@ def fetch_data(symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
 
 
 
-def compute_signals(df, short_window=20, long_window=50):
+def compute_signals(df: pd.DataFrame, short_window: int, long_window: int) -> pd.DataFrame:
     # add moving averages and trade signals to the dataframe
     df["sma_short"] = df["close"].rolling(window=short_window).mean()
     df["sma_long"] = df["close"].rolling(window=long_window).mean()
@@ -43,12 +46,21 @@ def compute_signals(df, short_window=20, long_window=50):
 
 
 def compute_metrics(df: pd.DataFrame) -> dict:
-    # Returns
+    # Raw Returns
     df["market_return"] = df["close"].pct_change()
-    df["strategy_return"] = df["position"] * df["market_return"] # return of the strategy (only earns when we have a position)
+
+    # Trade Detection
+    df["trade"] = df["position"].diff().abs().fillna(0)
+    df.loc[df.index[0], "trade"] = df["position"].iloc[0]
+    df["cost"] = df["trade"] * COST_PER_TRADE
+ 
+    # Net Strategy Return
+    df["strategy_return_gross"] = df["position"] * df["market_return"]
+    df["strategy_return"]       = df["strategy_return_gross"] - df["cost"]
 
     # Cumulative Wealth Index
     df["cumulative_market_return"] = (1 + df["market_return"]).cumprod()
+    df["cumulative_strategy_return_gross"] = (1 + df["strategy_return_gross"]).cumprod()
     df["cumulative_strategy_return"] = (1 + df["strategy_return"]).cumprod()
 
     #Sharpe Ratio
@@ -62,14 +74,17 @@ def compute_metrics(df: pd.DataFrame) -> dict:
     max_drawdown = drawdown.min() # most negative value = worst loss
 
     # Total Return
-    total_return_strategy = df["cumulative_strategy_return"].iloc[-1] - 1 # final cumulative return at the end of the period
+    total_return_strategy = df["cumulative_strategy_return"].iloc[-1] - 1
+    total_return_gross    = df["cumulative_strategy_return_gross"].iloc[-1] - 1
     total_return_market = df["cumulative_market_return"].iloc[-1] - 1
 
     metrics = {
-        "Strategy Return": total_return_strategy,
+        "Strategy Return (net)": total_return_strategy,
+        "Strategy Return (gross)": total_return_gross,
         "Market Return": total_return_market,
         "Sharpe Ratio": round(sharpe, 2),
-        "Max Drawdown": max_drawdown
+        "Max Drawdown": max_drawdown,
+        "Number of Trades": int(df["trade"].sum())
     }
 
     return df, metrics
@@ -85,12 +100,22 @@ def plot_results(df: pd.DataFrame, metrics: dict) -> None:
     ax1 = axes[0] 
     ax1.plot(df.index, df["cumulative_market_return"], label="Buy-and-Hold", color="blue", linewidth=1.5, linestyle="--")
     ax1.plot(df.index, df["cumulative_strategy_return"], label="SMA Strategy", color="grey", linewidth=1.5)
+
+    buys  = df[(df["trade"] == 1) & (df["position"] == 1)]
+    sells = df[(df["trade"] == 1) & (df["position"] == 0)]
+    ax1.scatter(buys.index,buys["cumulative_strategy_return"],  marker="^", color="green", zorder=5, s=40, label="Buy")
+    ax1.scatter(sells.index,sells["cumulative_strategy_return"], marker="v", color="red",   zorder=5, s=40, label="Sell")
+
     ax1.set_ylabel("Portfolio Value (starting = 1.0)")
     ax1.legend()
     ax1.grid(True, alpha=0.3)
-    textstr = (f"Strategy Return: {metrics['Strategy Return']:.1%}\n"
-               f"Sharpe Ratio: {metrics['Sharpe Ratio']}\n"
-               f"Max Drawdown: {metrics['Max Drawdown']:.2%}")
+    textstr = (f"Strategy Return (net):{metrics['Strategy Return (net)']:.1%}\n"
+               f"Strategy Return (gross):{metrics['Strategy Return (gross)']:.1%}\n"
+               f"Sharpe Ratio:{metrics['Sharpe Ratio']}\n"
+               f"Max Drawdown:{metrics['Max Drawdown']:.2%}\n"
+               f"Trades:{metrics['Number of Trades']}\n"
+               f"(Fee {TAKER_FEE:.2%} + Slippage {SLIPPAGE:.2%} per trade)"
+               )
     ax1.text(0.02, 0.98, textstr, transform=ax1.transAxes, verticalalignment='top', fontsize=9, bbox=dict(boxstyle='round', facecolor='white', alpha=0.5)) # transform=ax1.transAxes means the coordinates are relative to the axes (0,0 is bottom-left, 1,1 is top-right)
 
     # price with SMA lines
@@ -119,6 +144,7 @@ if __name__ == "__main__": # checks if this file is being run directly, or impor
     df = compute_signals(df, SHORT_WINDOW, LONG_WINDOW)
     df, metrics = compute_metrics(df)
 
+    print("Backtest Results")
     for key, value in metrics.items():
         if isinstance(value, float):
             # Format as percentage for Return and Drawdown metrics

@@ -32,7 +32,7 @@ A quantitative backtest of a Simple Moving Average (SMA) crossover strategy on B
 
 ## Key Findings
 
-**Structural Strategy Constraints**: The negative Sharpe ratio (−0.05) indicates that risk adjusted returns remain below the risk free rate despite outperforming buy and hold in absolute terms. This outcome is expected. A dual SMA crossover is a lagging, single signal strategy lacking volatility filtering, dynamic position sizing, and regime detection. Whipsaw losses in sideways markets are structurally unavoidable. A more advanced strategy is currently under development.
+**Structural Strategy Constraints**: The negative Sharpe ratio (−0.05) indicates that risk-adjusted returns remain below the risk-free rate despite outperforming buy-and-hold in absolute terms. This outcome is expected: a dual SMA crossover is a lagging, single-signal strategy that is particularly susceptible to frequent false breakouts in ranging markets, significantly amplifying signal noise. Its fixed parameter window further lacks adaptability to regime shifts, making whipsaw losses in sideways markets structurally unavoidable. Identified optimisation directions include introducing a volatility filter (e.g. ATR-based mechanism) to suppress noise-driven trades, and a dynamic parameter adjustment framework to improve cross-cycle robustness. A more advanced strategy incorporating these elements is currently under development.
 
 **Downside protection**: The strategy lost −5.62% over the study period against a BTC buy-and-hold return of −25.95%, representing +20.33 percentage points of outperformance in a declining market.
  
